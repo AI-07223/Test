@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function: Check if user is logged in
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function: Check user role from the 'users' collection
+    // Note: In a real production app, we often use Custom Claims (Auth Tokens) for this to avoid an extra DB read.
+    // But for this Learning ERP, reading the doc is easier to understand.
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    // Helper function: Check if user is Admin or Super Admin
+    function isAdmin() {
+      return isAuthenticated() && (getUserRole() == 'ADMIN' || getUserRole() == 'SUPER_ADMIN');
+    }
+
+    // Helper function: Check if user is Manager or above
+    function isManager() {
+      return isAuthenticated() && (getUserRole() == 'MANAGER' || isAdmin());
+    }
+
+    // --- COLLECTION RULES ---
+
+    // USERS Collection
+    match /users/{userId} {
+      // Anyone can read their OWN profile
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      // Managers can read all profiles (to see employees)
+      allow read: if isManager();
+
+      // Only Admins can create/update users (e.g. promoting roles)
+      // BUT, we allow a user to create THEIR OWN profile on sign-up (if it doesn't exist)
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+
+      // Updates are restricted to Admins (so employees can't promote themselves!)
+      allow update: if isAdmin();
+
+      // Only Super Admin can delete
+      allow delete: if isAuthenticated() && getUserRole() == 'SUPER_ADMIN';
+    }
+
+    // TASKS Collection (Example for ERP)
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated();
+      // Only Managers/Admins can create tasks
+      allow write: if isManager();
+    }
+
+    // Default: Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
