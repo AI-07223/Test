@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { User, AuthState } from '../types/auth.types';
 import { AuthService } from '../services/authService';
 
 // Define the shape of the Context (what data/functions are available to components)
 interface AuthContextType extends AuthState {
-  login: (email: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -17,32 +17,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [state, setState] = useState<AuthState>({
     user: null,
     isAuthenticated: false,
-    isLoading: false, // In a real app, this starts as true while we check Firebase
+    isLoading: false,
   });
 
-  const login = async (email: string) => {
+  // Updated to accept password
+  const login = async (email: string, password: string) => {
     setState(prev => ({ ...prev, isLoading: true }));
     try {
-      const user = await AuthService.login(email);
+      const user = await AuthService.login(email, password);
       setState({
         user,
         isAuthenticated: true,
         isLoading: false,
       });
     } catch (error) {
+      console.error(error);
       setState(prev => ({ ...prev, isLoading: false }));
-      alert((error as Error).message); // Simple error handling
+      alert("Login failed: " + (error as Error).message);
     }
   };
 
   const logout = async () => {
-    await AuthService.logout();
-    setState({
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
-    });
+    try {
+      await AuthService.logout();
+      setState({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
+    } catch (error) {
+      console.error(error);
+    }
   };
+
+  /*
+     NOTE: In a real app, you would also use onAuthStateChanged
+     inside a useEffect to persist the session on refresh.
+     For now, we keep it simple.
+  */
 
   return (
     <AuthContext.Provider value={{ ...state, login, logout }}>
